@@ -1,4 +1,4 @@
-# AI Meeting Assistant
+# MeetingFul - AI Meeting Assistant
 
 Turn raw meeting audio into clean transcripts, concise summaries, action items, and a searchable Q&A experience. This project records system audio or accepts an existing audio file, sends it to Groq for transcription/translation, summarizes with Mistral, and enables retrieval-augmented Q&A over the transcript.
 
