@@ -1,5 +1,6 @@
-import argparse
-from pathlib import Path
+import os
+import shutil
+from typing import Optional
 
 from src.audio_splitter import chunk_audio
 from src.audio_transcriber import transcribe_chunked_audio
@@ -8,147 +9,125 @@ from src.meeting_audio_processor import record_system_audio
 from src.meeting_summarizer import summarize_transcript
 from src.rag_pipeline import rag_engine
 
-DEFAULT_OUTPUT_DIR = "recordings"
+
+def prompt_yes_no(question: str, default: str = "y") -> bool:
+    choice = input(
+        f"{question} [{'Y/n' if default == 'y' else 'y/N'}]: ").strip().lower()
+    if not choice:
+        choice = default
+    return choice in {"y", "yes"}
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Process meeting audio: record, transcribe/translate, summarize, and query."
-    )
-    parser.add_argument(
-        "--input",
-        "-i",
-        help="Path to an audio file to process (mp3, wav, etc.).",
-    )
-    parser.add_argument(
-        "--record",
-        action="store_true",
-        help="Record system audio instead of using --input.",
-    )
-    parser.add_argument(
-        "--duration",
-        type=int,
-        default=20,
-        help="Recording duration in seconds (used with --record).",
-    )
-    parser.add_argument(
-        "--chunk-minutes",
-        type=int,
-        default=10,
-        help="Chunk size in minutes for transcription/translation.",
-    )
-    parser.add_argument(
-        "--translate",
-        action="store_true",
-        help="Translate audio to English instead of transcribing.",
-    )
-    parser.add_argument(
-        "--summarize",
-        action="store_true",
-        help="Summarize the transcript and extract actions/decisions/questions.",
-    )
-    parser.add_argument(
-        "--rag",
-        action="store_true",
-        help="Start an interactive Q&A session over the transcript.",
-    )
-    parser.add_argument(
-        "--output-dir",
-        default=DEFAULT_OUTPUT_DIR,
-        help="Directory for recordings and chunks.",
-    )
-    return parser.parse_args()
+def prompt_int(question: str, default: int) -> int:
+    raw = input(f"{question} [{default}]: ").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        print("Invalid number, using default.")
+        return default
+    return value
 
 
-def resolve_audio_path(args: argparse.Namespace) -> str:
-    if args.duration <= 0:
-        raise ValueError("--duration must be a positive number of seconds")
-    if args.chunk_minutes <= 0:
-        raise ValueError("--chunk-minutes must be a positive number")
+def get_audio_path() -> Optional[str]:
+    if prompt_yes_no("Record system audio now?", default="y"):
+        raw = input(
+            "Press Enter to Proceed: "
+        ).strip()
+        duration = None
+        if raw:
+            try:
+                duration = int(raw)
+            except ValueError:
+                print("Invalid number, switching to manual stop.")
+                duration = None
+        return record_system_audio(duration=duration)
 
-    if args.record:
-        return record_system_audio(
-            output_dir=args.output_dir,
-            duration=args.duration,
-        )
-
-    if not args.input:
-        raise ValueError("Provide --input or use --record")
-
-    audio_path = Path(args.input)
-    if not audio_path.exists():
-        raise FileNotFoundError(f"Input audio file not found: {audio_path}")
-
-    return str(audio_path)
+    path = input("Enter path to an existing audio file: ").strip().strip('"')
+    if not path:
+        return None
+    return path
 
 
-def run_rag_loop(transcript: str) -> None:
-    rag_chain = rag_engine(transcript)
-    print("\nRAG is ready. Ask a question, or type 'exit' to quit.")
+def select_transcript_mode() -> str:
+    choice = input(
+        "Choose mode: (t)ranscribe or (e)nglish-translate [t]: ").strip().lower()
+    if not choice:
+        return "transcribe"
+    if choice in {"e", "translate", "translation"}:
+        return "translate"
+    return "transcribe"
+
+
+def run_rag_qa(transcript: str) -> None:
+    print("\nRAG Q&A. Enter a question or press Enter to exit.")
+    chain = rag_engine(transcript)
 
     while True:
-        try:
-            question = input("> ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print("\nExiting.")
+        question = input("Q: ").strip()
+        if not question:
             break
-
-        if not question or question.lower() in {"exit", "quit"}:
-            break
-
-        result = rag_chain.invoke({"input": question})
-        if isinstance(result, dict):
-            answer = result.get("answer", "")
+        result = chain.invoke({"input": question})
+        if isinstance(result, str):
+            answer = result
         else:
-            answer = str(result)
+            answer = (
+                result.get("answer")
+                or result.get("result")
+                or result.get("output")
+                or str(result)
+            )
+        print(f"A: {answer}\n")
 
-        print(answer)
 
-
-def main() -> int:
-    args = parse_args()
-
+def main() -> None:
     try:
-        audio_path = resolve_audio_path(args)
-    except Exception as exc:
-        print(f"[ERROR] {exc}")
-        return 1
+        audio_path = get_audio_path()
+        if not audio_path:
+            print("No audio file provided. Exiting.")
+            return
 
-    try:
-        chunk_paths = chunk_audio(
-            audio_path,
-            chunk_minutes=args.chunk_minutes,
-            output_dir=args.output_dir,
-        )
-    except Exception as exc:
-        print(f"[ERROR] Failed to chunk audio: {exc}")
-        return 1
+        if not os.path.exists(audio_path):
+            print(f"Audio file not found: {audio_path}")
+            return
 
-    if not chunk_paths:
-        print("[ERROR] No audio chunks were created.")
-        return 1
+        chunk_minutes = prompt_int("Chunk size in minutes", 10)
+        chunk_paths = chunk_audio(audio_path, chunk_minutes=chunk_minutes)
 
-    if args.translate:
-        transcript = translate_chunked_audio(chunk_paths)
-    else:
-        transcript = transcribe_chunked_audio(chunk_paths)
+        if not chunk_paths:
+            print("No chunks created. Exiting.")
+            return
 
-    if args.summarize:
-        summary_bundle = summarize_transcript(transcript)
-        print("\nSummary:\n")
-        print(summary_bundle["summary"])
-        print("\nAction Items:\n")
-        print(summary_bundle["action_items"])
-        print("\nKey Decisions:\n")
-        print(summary_bundle["key_decisions"])
-        print("\nOpen Questions:\n")
-        print(summary_bundle["open_questions"])
+        mode = select_transcript_mode()
+        if mode == "translate":
+            transcript = translate_chunked_audio(chunk_paths)
+        else:
+            transcript = transcribe_chunked_audio(chunk_paths)
 
-    if args.rag:
-        run_rag_loop(transcript)
+        if not transcript or not transcript.strip():
+            print("No transcript produced. Exiting.")
+            return
 
-    return 0
+        if prompt_yes_no("Run summarization?", default="y"):
+            result = summarize_transcript(transcript)
+            print("\nSummary:\n")
+            print(result.get("summary", ""))
+            print("\nAction Items:\n")
+            print(result.get("action_items", ""))
+            print("\nKey Decisions:\n")
+            print(result.get("key_decisions", ""))
+            print("\nOpen Questions:\n")
+            print(result.get("open_questions", ""))
+
+        if prompt_yes_no("Run RAG Q&A?", default="n"):
+            run_rag_qa(transcript)
+    finally:
+        recordings_dir = "recordings"
+        if os.path.isdir(recordings_dir):
+            shutil.rmtree(recordings_dir)
+            print(f"Deleted recordings folder: {recordings_dir}")
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

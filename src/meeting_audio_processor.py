@@ -1,71 +1,147 @@
 import os
 import warnings
+from typing import Optional
+
+import soundcard as sc
+import soundfile as sf
+import numpy as np
 
 from pydub import AudioSegment
-import soundfile as sf
-import soundcard as sc
 
 warnings.filterwarnings("ignore")
 
-DEFAULT_SAMPLERATE = 16000
-DEFAULT_CHANNELS = 1
-DEFAULT_DURATION = 20
-DEFAULT_BITRATE = "64k"
-
 
 def record_system_audio(
-    output_dir: str = "recordings",
-    duration: int = DEFAULT_DURATION,
-    samplerate: int = DEFAULT_SAMPLERATE,
-    channels: int = DEFAULT_CHANNELS,
-    bitrate: str = DEFAULT_BITRATE,
-) -> str:
+    duration: Optional[int] = None,
+    samplerate=16000,
+    channels=1,
+    bitrate="64k",
+    output_dir="recordings"
+):
+    """
+    Records system audio using WASAPI loopback
+    and converts it to MP3. If duration is None,
+    press 'q' to stop recording.
+
+    Returns:
+        mp3_file_path (str)
+    """
+
+    # ================= CREATE OUTPUT DIR =================
+
     os.makedirs(output_dir, exist_ok=True)
 
-    temp_wav = os.path.join(output_dir, "temp_audio.wav")
-    final_mp3 = os.path.join(output_dir, "converted_audio.mp3")
+    # ================= FILE NAMES =================
 
-    speaker = sc.default_speaker()
-    print(f"\nUsing Speaker: {speaker.name}")
-    print("\nRecording system audio...")
+    temp_wav = os.path.join(
+        output_dir,
+        f"temp_audio.wav"
+    )
+
+    final_mp3 = os.path.join(
+        output_dir,
+        f"converted_audio.mp3"
+    )
 
     try:
+
+        # ================= GET SPEAKER =================
+
+        speaker = sc.default_speaker()
+
+        print(f"\nUsing Speaker: {speaker.name}")
+
+        print("\nRecording system audio...")
+
+        # ================= RECORD AUDIO =================
+
         with sc.get_microphone(
             id=str(speaker.name),
-            include_loopback=True,
+            include_loopback=True
         ).recorder(
             samplerate=samplerate,
-            channels=channels,
+            channels=channels
         ) as mic:
-            data = mic.record(numframes=samplerate * duration)
-            sf.write(temp_wav, data, samplerate)
+            if duration and duration > 0:
+                data = mic.record(
+                    numframes=samplerate * duration
+                )
+            else:
+                try:
+                    import msvcrt
+                except ImportError:
+                    print("Manual stop is only supported on Windows.")
+                    return None
+
+                print("Press 'q' to stop recording...")
+                chunk_seconds = 0.5
+                chunk_frames = int(samplerate * chunk_seconds)
+                frames = []
+
+                while True:
+                    chunk = mic.record(numframes=chunk_frames)
+                    frames.append(chunk)
+
+                    if msvcrt.kbhit():
+                        key = msvcrt.getwch()
+                        if key.lower() == "q":
+                            break
+
+                data = (
+                    np.concatenate(frames, axis=0)
+                    if frames
+                    else np.empty((0, channels), dtype="float32")
+                )
+
+            if data.size == 0:
+                print("No audio captured.")
+                return None
+
+            sf.write(
+                temp_wav,
+                data,
+                samplerate
+            )
 
         print("\nWAV recording saved!")
-    except Exception as exc:
-        raise RuntimeError("Recording failed") from exc
 
-    try:
+        # ================= CONVERT TO MP3 =================
+
         print("\nConverting to MP3...")
+
         audio = AudioSegment.from_wav(temp_wav)
-        audio.export(final_mp3, format="mp3", bitrate=bitrate)
+
+        audio.export(
+            final_mp3,
+            format="mp3",
+            bitrate=bitrate
+        )
+
         print("\nMP3 saved successfully!")
-    except Exception as exc:
-        raise RuntimeError("MP3 conversion failed") from exc
-    finally:
-        try:
-            os.remove(temp_wav)
-            print("\nTemporary WAV deleted!")
-        except Exception:
-            print("\nCould not delete temp WAV")
 
-    file_size = os.path.getsize(final_mp3) / (1024 * 1024)
-    print("\n========== RECORDING COMPLETE ==========")
-    print(f"Saved File : {final_mp3}")
-    print(f"File Size  : {file_size:.2f} MB")
-    print("========================================")
+        # ================= DELETE TEMP WAV =================
 
-    return final_mp3
+        os.remove(temp_wav)
 
+        print("\nTemporary WAV deleted!")
 
-if __name__ == "__main__":
-    record_system_audio()
+        # ================= FILE INFO =================
+
+        file_size = os.path.getsize(final_mp3) / (1024 * 1024)
+
+        print("\n========== RECORDING COMPLETE ==========")
+
+        print(f"Saved File : {final_mp3}")
+
+        print(f"File Size  : {file_size:.2f} MB")
+
+        print("========================================")
+
+        return final_mp3
+
+    except Exception as e:
+
+        print("\nRecording failed!")
+        print(e)
+
+        return None

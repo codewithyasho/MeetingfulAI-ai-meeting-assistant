@@ -36,8 +36,8 @@ def extract_action_items(transcript: str) -> str:
 
     result = chain.invoke({"text": transcript})
 
-    with open("action_items.txt", "w", encoding="utf-8") as f:
-        f.write(result)
+    # with open("action_items.txt", "w", encoding="utf-8") as f:
+    #     f.write(result)
 
     return result
 
@@ -49,8 +49,8 @@ def extract_key_decisions(transcript: str) -> str:
     )
     result = chain.invoke({"text": transcript})
 
-    with open("key_decisions.txt", "w", encoding="utf-8") as f:
-        f.write(result)
+    # with open("key_decisions.txt", "w", encoding="utf-8") as f:
+    #     f.write(result)
 
     return result
 
@@ -59,11 +59,12 @@ def extract_questions(transcript: str) -> str:
     chain = build_chain(
         "Extract all unresolved questions or topics needing follow-up from the transcript. "
         "Format as a numbered list. If none found, say 'No open questions found.'"
+        "Dont make up questions."
     )
     result = chain.invoke({"text": transcript})
 
-    with open("open_questions.txt", "w", encoding="utf-8") as f:
-        f.write(result)
+    # with open("open_questions.txt", "w", encoding="utf-8") as f:
+    #     f.write(result)
 
     return result
 
@@ -86,8 +87,8 @@ def summarize_transcript(transcript: str) -> dict:
     # 2. Combine partial summaries into one text
     combined_partial_summaries = "\n\n".join(chunk_summaries)
 
-    with open("combined_partial_summaries.txt", "w", encoding="utf-8") as f:
-        f.write(combined_partial_summaries)
+    # with open("combined_partial_summaries.txt", "w", encoding="utf-8") as f:
+    #     f.write(combined_partial_summaries)
 
     # 3. Combine into final bullet points
     final_prompt = ChatPromptTemplate.from_template(
