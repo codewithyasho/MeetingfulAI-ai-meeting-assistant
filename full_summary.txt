@@ -1,0 +1,36 @@
+**Title: "AI Demystified: 10 Essential Terms Explained Simply"**
+
+### **Final Professional Video Summary**
+
+- **Artificial Intelligence (AI)**
+  - Computers performing human-like tasks (e.g., writing emails, driving cars).
+
+- **Language Model**
+  - Predicts the next word in a sentence, generating responses incrementally (e.g., suggesting "biryani" when asked about hunger).
+
+- **Large Language Model (LLM)**
+  - Advanced AI trained on vast datasets (books, articles) capable of complex tasks like writing poetry or solving math problems (e.g., GPT, Claude, Gemini).
+
+- **Prompt**
+  - A command or question given to AI. Specific prompts yield better results; vague ones produce unclear responses (e.g., "sing *Natu Natu*" vs. "sing a song").
+
+- **Tokens**
+  - Smaller text units (words or syllables) that AI processes, affecting cost and memory limits.
+
+- **Context Window**
+  - The amount of text an AI can consider at once (like a desk’s capacity). Larger windows handle more information (e.g., GPT 5.3, Gemini, Opus 4.6/4.7).
+
+- **AI Hallucination**
+  - AI confidently generates false or misleading information—always verify its responses.
+
+- **Fine-Tuning**
+  - Customizing AI with additional data (e.g., company handbooks) to improve accuracy.
+
+- **Retrieval-Augmented Generation (RAG)**
+  - AI retrieves answers from external sources (like reference books) for better accuracy instead of relying solely on memorized data.
+
+- **AI Agents**
+  - AI with tool access to perform real-world tasks (e.g., ordering items, cooking) beyond answering questions (e.g., Amazon’s Rufus).
+
+- **OpenRouter**
+  - A tool simplifying AI model access via a single API.
